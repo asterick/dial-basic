@@ -101,13 +101,6 @@ typedef struct ble_lbs_s ble_lbs_t;
 
 typedef void (*ble_lbs_led_write_handler_t) (uint16_t conn_handle, ble_lbs_t * p_lbs, uint8_t new_state);
 
-/** @brief LED Button Service init structure. This structure contains all options and data needed for
- *        initialization of the service.*/
-typedef struct
-{
-    ble_lbs_led_write_handler_t led_write_handler; /**< Event handler to be called when the LED Characteristic is written. */
-} ble_lbs_init_t;
-
 /**@brief LED Button Service structure. This structure contains various status information for the service. */
 struct ble_lbs_s
 {
