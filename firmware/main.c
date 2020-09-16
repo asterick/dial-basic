@@ -110,17 +110,6 @@ static void conn_params_error_handler(uint32_t nrf_error)
     APP_ERROR_HANDLER(nrf_error);
 }
 
-/**@brief Function for handling write events to the LED characteristic.
- *
- * @param[in] p_lbs     Instance of LED Button Service to which the write applies.
- * @param[in] led_state Written/desired state of the LED.
- */
-static void led_write_handler(uint16_t conn_handle, ble_lbs_t * p_lbs, uint8_t led_state)
-{
-    // THIS RIGHT HERE IS GARBAGE
-}
-
-
 /**@brief Function for starting advertising.
  */
 static void advertising_start(void)
@@ -141,10 +130,9 @@ static void on_write(ble_lbs_t * p_lbs, ble_evt_t const * p_ble_evt)
     ble_gatts_evt_write_t const * p_evt_write = &p_ble_evt->evt.gatts_evt.params.write;
 
     if (   (p_evt_write->handle == p_lbs->led_char_handles.value_handle)
-        && (p_evt_write->len == 1)
-        && (p_lbs->led_write_handler != NULL))
+        && (p_evt_write->len == 1))
     {
-        p_lbs->led_write_handler(p_ble_evt->evt.gap_evt.conn_handle, p_lbs, p_evt_write->data[0]);
+        // TODO: HANDLE WRITE HERE
     }
 }
 
@@ -164,14 +152,11 @@ void ble_lbs_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
     }
 }
 
-uint32_t ble_lbs_init(ble_lbs_t * p_lbs, const ble_lbs_init_t * p_lbs_init)
+uint32_t ble_lbs_init(ble_lbs_t * p_lbs)
 {
     uint32_t              err_code;
     ble_uuid_t            ble_uuid;
     ble_add_char_params_t add_char_params;
-
-    // Initialize service structure.
-    p_lbs->led_write_handler = p_lbs_init->led_write_handler;
 
     // Add service.
     ble_uuid128_t base_uuid = {LBS_UUID_BASE};
@@ -312,7 +297,6 @@ static void ble_stack_init(void)
         .slave_latency     = SLAVE_LATENCY,
         .conn_sup_timeout  = CONN_SUP_TIMEOUT,
     };
-    ble_lbs_init_t init     = {0};
 
     ble_gap_conn_sec_mode_t sec_mode;
     ret_code_t err_code;
@@ -349,9 +333,7 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 
     // Initialize LBS.
-    init.led_write_handler = led_write_handler;
-
-    err_code = ble_lbs_init(&m_lbs, &init);
+    err_code = ble_lbs_init(&m_lbs);
     APP_ERROR_CHECK(err_code);
 
     // Setup advertising

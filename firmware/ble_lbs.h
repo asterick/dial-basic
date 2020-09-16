@@ -128,7 +128,7 @@ struct ble_lbs_s
  *
  * @retval NRF_SUCCESS If the service was initialized successfully. Otherwise, an error code is returned.
  */
-uint32_t ble_lbs_init(ble_lbs_t * p_lbs, const ble_lbs_init_t * p_lbs_init);
+uint32_t ble_lbs_init(ble_lbs_t * p_lbs);
 
 
 /**@brief Function for handling the application's BLE stack events.
