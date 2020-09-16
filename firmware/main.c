@@ -42,20 +42,14 @@
 #define SERIAL_UUID_WRITE_CHAR  0xBA5E
 #define BLE_SERIAL_BLE_OBSERVER_PRIO 2
 
-// Forward declaration of the ble_serial_t type.
-
-typedef struct ble_serial_s ble_serial_t;
-typedef void (*ble_serial_write_handler_t) (uint16_t conn_handle, ble_serial_t * p_serial, uint8_t new_state);
-
 /**@brief Serial service structure. This structure contains various status information for the service. */
-struct ble_serial_s
+typedef struct ble_serial_s
 {
     uint16_t                   service_handle;      /**< Handle of serial service (as provided by the BLE stack). */
     ble_gatts_char_handles_t   write_char_handles;  /**< Handles related to the write Characteristic. */
     ble_gatts_char_handles_t   read_char_handles;   /**< Handles related to the read Characteristic. */
     uint8_t                    uuid_type;           /**< UUID type for the serial service. */
-    ble_serial_write_handler_t write_handler;       /**< Event handler to be called when the write Characteristic is written. */
-};
+} ble_serial_t;
 
 static ble_serial_t m_serial;                                                                             
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
@@ -143,12 +137,11 @@ static void advertising_start(void)
 static void ble_serial_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
 {
     ble_gatts_evt_write_t const * p_evt_write = &p_ble_evt->evt.gatts_evt.params.write;
-    ble_serial_t * p_serial = (ble_serial_t *)p_context;
 
     switch (p_ble_evt->header.evt_id)
     {
         case BLE_GATTS_EVT_WRITE:
-            if (   (p_evt_write->handle == p_serial->write_char_handles.value_handle)
+            if (   (p_evt_write->handle == m_serial.write_char_handles.value_handle)
                 && (p_evt_write->len >= 1))
             {
                 // TODO: HANDLE WRITE HERE
@@ -161,65 +154,13 @@ static void ble_serial_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
     }
 }
 
-static uint32_t ble_serial_init(ble_serial_t * p_serial)
-{
-    uint32_t              err_code;
-    ble_uuid_t            ble_uuid;
-    ble_add_char_params_t add_char_params;
-
-    // Add service.
-    ble_uuid128_t base_uuid = {SERIAL_UUID_BASE};
-    err_code = sd_ble_uuid_vs_add(&base_uuid, &p_serial->uuid_type);
-    VERIFY_SUCCESS(err_code);
-
-    ble_uuid.type = p_serial->uuid_type;
-    ble_uuid.uuid = SERIAL_UUID_SERVICE;
-
-    err_code = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &p_serial->service_handle);
-    VERIFY_SUCCESS(err_code);
-
-    // Add read characteristic.
-    memset(&add_char_params, 0, sizeof(add_char_params));
-    add_char_params.uuid              = SERIAL_UUID_READ_CHAR;
-    add_char_params.uuid_type         = p_serial->uuid_type;
-    add_char_params.init_len          = sizeof(uint8_t);
-    add_char_params.max_len           = sizeof(uint8_t);
-    add_char_params.char_props.read   = 1;
-    add_char_params.char_props.notify = 1;
-
-    add_char_params.read_access       = SEC_OPEN;
-    add_char_params.cccd_write_access = SEC_OPEN;
-
-    err_code = characteristic_add(p_serial->service_handle,
-                                  &add_char_params,
-                                  &p_serial->read_char_handles);
-    if (err_code != NRF_SUCCESS)
-    {
-        return err_code;
-    }
-
-    // Add write characteristic.
-    memset(&add_char_params, 0, sizeof(add_char_params));
-    add_char_params.uuid             = SERIAL_UUID_WRITE_CHAR;
-    add_char_params.uuid_type        = p_serial->uuid_type;
-    add_char_params.init_len         = sizeof(uint8_t);
-    add_char_params.max_len          = sizeof(uint8_t);
-    add_char_params.char_props.read  = 1;
-    add_char_params.char_props.write = 1;
-
-    add_char_params.read_access  = SEC_OPEN;
-    add_char_params.write_access = SEC_OPEN;
-
-    return characteristic_add(p_serial->service_handle, &add_char_params, &p_serial->write_char_handles);
-}
-
-uint32_t ble_serial_write(uint16_t conn_handle, ble_serial_t * p_serial, uint8_t *data, uint16_t len)
+uint32_t ble_serial_write(uint16_t conn_handle, uint8_t *data, uint16_t len)
 {
     ble_gatts_hvx_params_t params;
 
     memset(&params, 0, sizeof(params));
     params.type   = BLE_GATT_HVX_NOTIFICATION;
-    params.handle = p_serial->read_char_handles.value_handle;
+    params.handle = m_serial.read_char_handles.value_handle;
     params.p_data = data;
     params.p_len  = &len;
 
@@ -292,10 +233,56 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
     }
 }
 
-/**@brief Function for initializing the BLE stack.
- *
- * @details Initializes the SoftDevice and the BLE event interrupt.
- */
+static void ble_serial_init()
+{
+    uint32_t              err_code;
+    ble_uuid_t            ble_uuid;
+    ble_add_char_params_t add_char_params;
+
+    // Add service.
+    ble_uuid128_t base_uuid = {SERIAL_UUID_BASE};
+    err_code = sd_ble_uuid_vs_add(&base_uuid, &m_serial.uuid_type);
+    APP_ERROR_CHECK(err_code);
+
+    ble_uuid.type = m_serial.uuid_type;
+    ble_uuid.uuid = SERIAL_UUID_SERVICE;
+
+    err_code = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &m_serial.service_handle);
+    APP_ERROR_CHECK(err_code);
+
+    // Add read characteristic.
+    memset(&add_char_params, 0, sizeof(add_char_params));
+    add_char_params.uuid              = SERIAL_UUID_READ_CHAR;
+    add_char_params.uuid_type         = m_serial.uuid_type;
+    add_char_params.init_len          = sizeof(uint8_t);
+    add_char_params.max_len           = sizeof(uint8_t);
+    add_char_params.char_props.read   = 1;
+    add_char_params.char_props.notify = 1;
+
+    add_char_params.read_access       = SEC_OPEN;
+    add_char_params.cccd_write_access = SEC_OPEN;
+
+    err_code = characteristic_add(m_serial.service_handle,
+                                  &add_char_params,
+                                  &m_serial.read_char_handles);
+    APP_ERROR_CHECK(err_code);
+
+    // Add write characteristic.
+    memset(&add_char_params, 0, sizeof(add_char_params));
+    add_char_params.uuid             = SERIAL_UUID_WRITE_CHAR;
+    add_char_params.uuid_type        = m_serial.uuid_type;
+    add_char_params.init_len         = sizeof(uint8_t);
+    add_char_params.max_len          = sizeof(uint8_t);
+    add_char_params.char_props.read  = 1;
+    add_char_params.char_props.write = 1;
+
+    add_char_params.read_access  = SEC_OPEN;
+    add_char_params.write_access = SEC_OPEN;
+
+    err_code = characteristic_add(m_serial.service_handle, &add_char_params, &m_serial.write_char_handles);
+    APP_ERROR_CHECK(err_code);
+}
+
 static void ble_stack_init(void)
 {
     static const ble_gap_conn_params_t gap_conn_params = {
@@ -323,7 +310,7 @@ static void ble_stack_init(void)
 
     // Register a handler for BLE events.
     NRF_SDH_BLE_OBSERVER(m_ble_observer, APP_BLE_OBSERVER_PRIO, ble_evt_handler, NULL);
-    NRF_SDH_BLE_OBSERVER(m_serial_observer, BLE_SERIAL_BLE_OBSERVER_PRIO, ble_serial_on_ble_evt, &m_serial);
+    NRF_SDH_BLE_OBSERVER(m_serial_observer, BLE_SERIAL_BLE_OBSERVER_PRIO, ble_serial_on_ble_evt, NULL);
 
     // init gap parameters
     BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
@@ -341,8 +328,7 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 
     // Initialize BLE serial.
-    err_code = ble_serial_init(&m_serial);
-    APP_ERROR_CHECK(err_code);
+    ble_serial_init();
 
     // Setup advertising
     ble_uuid_t adv_uuids[] = {{SERIAL_UUID_SERVICE, m_serial.uuid_type}};
