@@ -136,7 +136,7 @@ static inline bool hid_kbd_transfer_next(app_usbd_hid_kbd_t const * p_kbd)
  *
  * @return Standard error code.
  */
-static inline ret_code_t hid_kbd_transfer_set(app_usbd_hid_kbd_t const * p_kbd)
+ret_code_t hid_kbd_transfer_set(app_usbd_hid_kbd_t const * p_kbd)
 {
     app_usbd_class_inst_t const * p_inst    = (app_usbd_class_inst_t const *)p_kbd;
     app_usbd_hid_kbd_ctx_t      * p_kbd_ctx = hid_kbd_ctx_get(p_kbd);

@@ -320,7 +320,7 @@ ret_code_t hid_kbd_on_set_protocol(app_usbd_hid_kbd_t const * p_kbd,
  * @return Standard error code.
  */
 ret_code_t hid_kbd_clear_buffer(app_usbd_class_inst_t const * p_inst);
-
+ret_code_t hid_kbd_transfer_set(app_usbd_hid_kbd_t const * p_kbd);
 /** @} */
 
 #ifdef __cplusplus
