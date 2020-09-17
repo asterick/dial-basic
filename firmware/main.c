@@ -1,8 +1,12 @@
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 #include "nordic_common.h"
 #include "nrf.h"
+#include "nrf_drv_usbd.h"
+#include "nrf_drv_clock.h"
 #include "app_error.h"
 #include "ble.h"
 #include "ble_err.h"
@@ -12,9 +16,13 @@
 #include "ble_conn_params.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_ble.h"
-#include "app_timer.h"
 #include "nrf_ble_gatt.h"
-#include "nrf_pwr_mgmt.h"
+#include "app_timer.h"
+#include "app_usbd.h"
+#include "app_usbd_core.h"
+#include "app_usbd_hid_mouse.h"
+#include "app_usbd_hid_kbd.h"
+#include "app_error.h"
 
 #define DEVICE_NAME                     "DialBasic"                             /**< Name of device. Will be included in the advertising data. */
 
@@ -41,6 +49,8 @@
 #define SERIAL_UUID_READ_CHAR   0xBA5D
 #define SERIAL_UUID_WRITE_CHAR  0xBA5E
 #define BLE_SERIAL_BLE_OBSERVER_PRIO 2
+
+uint8_t VERSION_NUMBER[] = {0x20, 0x20, 0x09, 0x16};
 
 /**@brief Serial service structure. This structure contains various status information for the service. */
 typedef struct ble_serial_s
@@ -333,9 +343,18 @@ static void ble_stack_init(void)
     // Setup advertising
     ble_uuid_t adv_uuids[] = {{SERIAL_UUID_SERVICE, m_serial.uuid_type}};
     
+    ble_advdata_manuf_data_t manfudata = {
+        .company_identifier = 0xDEAD,
+        .data = {
+            .size = sizeof(VERSION_NUMBER),
+            .p_data = VERSION_NUMBER,
+        }
+    };
+
     const ble_advdata_t advdata = {
         .name_type          = BLE_ADVDATA_FULL_NAME,
         .include_appearance = true,
+        .p_manuf_specific_data = &manfudata,
         .flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE,
     };
 
@@ -353,17 +372,16 @@ static void ble_stack_init(void)
     err_code = ble_advdata_encode(&srdata, m_adv_data.scan_rsp_data.p_data, &m_adv_data.scan_rsp_data.len);
     APP_ERROR_CHECK(err_code);
 
-    ble_gap_adv_params_t adv_params;
+    static const ble_gap_adv_params_t adv_params = {
+        .primary_phy     = BLE_GAP_PHY_1MBPS,
+        .duration        = APP_ADV_DURATION,
+        .properties.type = BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED,
+        .p_peer_addr     = NULL,
+        .filter_policy   = BLE_GAP_ADV_FP_ANY,
+        .interval        = APP_ADV_INTERVAL,
+    };
 
     // Set advertising parameters.
-    memset(&adv_params, 0, sizeof(adv_params));
-
-    adv_params.primary_phy     = BLE_GAP_PHY_1MBPS;
-    adv_params.duration        = APP_ADV_DURATION;
-    adv_params.properties.type = BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
-    adv_params.p_peer_addr     = NULL;
-    adv_params.filter_policy   = BLE_GAP_ADV_FP_ANY;
-    adv_params.interval        = APP_ADV_INTERVAL;
 
     err_code = sd_ble_gap_adv_set_configure(&m_adv_handle, &m_adv_data, &adv_params);
     APP_ERROR_CHECK(err_code);
@@ -384,28 +402,95 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
+static void usbd_user_ev_handler(app_usbd_event_type_t event)
+{
+    switch (event)
+    {
+        case APP_USBD_EVT_DRV_SOF:
+            break;
+        case APP_USBD_EVT_DRV_SUSPEND:
+            app_usbd_suspend_req(); // Allow the library to put the peripheral into sleep modey
+            break;
+        case APP_USBD_EVT_DRV_RESUME:
+            break;
+        case APP_USBD_EVT_STARTED:
+            break;
+        case APP_USBD_EVT_STOPPED:
+            app_usbd_disable();
+            break;
+        default:
+            break;
+    }
+}
 
-/**@brief Function for application main entry.
- */
+app_usbd_class_inst_t const *  usb_add_keyboard1();
+app_usbd_class_inst_t const *  usb_add_keyboard2();
+extern app_usbd_hid_kbd_t* kbd1;
+extern app_usbd_hid_kbd_t* kbd2;
+
+static void usb_stack_init()
+{
+    ret_code_t err_code;
+
+    static const app_usbd_config_t usbd_config = {
+        .ev_state_proc = usbd_user_ev_handler,
+    };
+
+    err_code = app_usbd_init(&usbd_config);
+    APP_ERROR_CHECK(err_code);
+
+    app_usbd_class_inst_t const * class_inst_kbd = usb_add_keyboard1();
+    err_code = app_usbd_class_append(class_inst_kbd);
+    APP_ERROR_CHECK(err_code);
+
+    class_inst_kbd = usb_add_keyboard2();
+    err_code = app_usbd_class_append(class_inst_kbd);
+    APP_ERROR_CHECK(err_code);
+
+    app_usbd_enable();
+    app_usbd_start();
+}
+
+APP_TIMER_DEF(m_repeated_timer_id);
+
+static void repeated_timer_handler(void * p_context)
+{
+    app_usbd_hid_kbd_key_control(kbd1, APP_USBD_HID_KBD_A, true);
+    app_usbd_hid_kbd_key_control(kbd2, APP_USBD_HID_KBD_A, true);
+}
+
 int main(void)
 {
     ret_code_t err_code;
 
+    // Bring up clocks
+    err_code = nrf_drv_clock_init();
+    APP_ERROR_CHECK(err_code);
+
+    nrf_drv_clock_lfclk_request(NULL);
+    while(!nrf_drv_clock_lfclk_is_running()) ;
+
     // Initialize board
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
-    err_code = nrf_pwr_mgmt_init();
-    APP_ERROR_CHECK(err_code);
 
-    // Initialize BLE Stack
+    // Initialize Stacks
+    usb_stack_init();
     ble_stack_init();
 
     // Start execution.
     advertising_start();
 
+    err_code = app_timer_create(&m_repeated_timer_id,
+                                APP_TIMER_MODE_REPEATED,
+                                repeated_timer_handler);
+
+    app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(1000), NULL);
+
     // Enter main loop.
     for (;;)
     {
-        nrf_pwr_mgmt_run();
+        while (app_usbd_event_queue_process()) ;
+        __WFE();
     }
 }
