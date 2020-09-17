@@ -124,13 +124,14 @@ typedef struct {
  * @param subclass_boot     Subclass boot (@ref app_usbd_hid_subclass_t).
  * @param endpoint_list     List of endpoints and intervals
  */
-#define APP_USBD_HID_KBD_INST_CONFIG(report_buff_in,                            \
+#define APP_USBD_HID_KBD_INST_CONFIG(instance_name,                             \
+                                     report_buff_in,                            \
                                      report_buff_out,                           \
                                      user_ev_handler,                           \
                                      subclass_boot,                             \
                                      endpoint_list)                             \
     .inst = {                                                                   \
-         .hid_inst = APP_USBD_HID_INST_CONFIG(keyboard_descs,                   \
+         .hid_inst = APP_USBD_HID_INST_CONFIG(keyboard_descs ## instance_name,  \
                                               subclass_boot,                    \
                                               APP_USBD_HID_PROTO_KEYBOARD,      \
                                               report_buff_in,                   \
@@ -171,7 +172,8 @@ extern const app_usbd_class_methods_t app_usbd_hid_kbd_class_methods;
         app_usbd_hid_kbd,                                                                          \
         &app_usbd_hid_kbd_class_methods,                                                           \
         APP_USBD_HID_KBD_CONFIG(interface_number, endpoint),                                       \
-        (APP_USBD_HID_KBD_INST_CONFIG(CONCAT_2(instance_name, _in),                                \
+        (APP_USBD_HID_KBD_INST_CONFIG(instance_name,                                               \
+                                      CONCAT_2(instance_name, _in),                                \
                                       &CONCAT_2(instance_name, _out),                              \
                                       user_ev_handler,                                             \
                                       subclass_boot,                                               \

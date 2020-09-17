@@ -228,8 +228,8 @@ APP_USBD_CLASS_TYPEDEF(app_usbd_hid_kbd,                        \
  * @endcode
  */
 #define APP_USBD_HID_KBD_GLOBAL_DEF(instance_name, interface_number, endpoint, user_ev_handler, subclass_boot)  \
-        APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(keyboard_desc, APP_USBD_HID_KBD_REPORT_DSC());                \
-        static const app_usbd_hid_subclass_desc_t * keyboard_descs[] = {&keyboard_desc};                        \
+        APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(keyboard_desc ## instance_name, APP_USBD_HID_KBD_REPORT_DSC());                \
+        static const app_usbd_hid_subclass_desc_t * keyboard_descs ## instance_name[] = {&keyboard_desc ## instance_name};                        \
         APP_USBD_HID_KBD_GLOBAL_DEF_INTERNAL(instance_name,                                                     \
                                              interface_number,                                                  \
                                              endpoint,                                                          \
