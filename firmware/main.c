@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
@@ -7,6 +8,7 @@
 #include "nrf.h"
 #include "nrf_drv_usbd.h"
 #include "nrf_drv_clock.h"
+#include "app_util.h"
 #include "app_error.h"
 #include "ble.h"
 #include "ble_err.h"
@@ -20,6 +22,7 @@
 #include "app_timer.h"
 #include "app_usbd.h"
 #include "app_usbd_core.h"
+#include "app_usbd_audio.h"
 #include "app_usbd_hid_mouse.h"
 #include "app_usbd_hid_kbd.h"
 #include "app_error.h"
@@ -71,9 +74,10 @@ static uint8_t m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];                    
 static uint8_t m_enc_scan_response_data[BLE_GAP_ADV_SET_DATA_SIZE_MAX];         /**< Buffer for storing an encoded scan data. */
 
 /* USB Definitions */
-#define APP_USBD_INTERFACE_KBD   0
-#define APP_USBD_INTERFACE_MOUSE 1
-#define CONFIG_MOUSE_BUTTON_COUNT   8
+#define HP_INTERFACES_CONFIG()      APP_USBD_AUDIO_CONFIG_OUT(0, 1)
+#define APP_USBD_INTERFACE_KBD      1
+#define APP_USBD_INTERFACE_MOUSE    2
+#define CONFIG_MOUSE_BUTTON_COUNT   5
 
 /**@brief Struct that contains pointers to the encoded advertising data. */
 static ble_gap_adv_data_t m_adv_data =
@@ -412,10 +416,67 @@ static void hid_mouse_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                       app_usbd_hid_user_event_t event);
 static void hid_kbd_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                     app_usbd_hid_user_event_t event);
+static void hp_audio_user_ev_handler(app_usbd_class_inst_t const * p_inst,
+                                     app_usbd_audio_user_event_t   event);
+
+#define BUFFER_SIZE (48)
+
+#define HP_TERMINAL_CH_CONFIG()                                                                       \
+        (APP_USBD_AUDIO_IN_TERM_CH_CONFIG_LEFT_FRONT | APP_USBD_AUDIO_IN_TERM_CH_CONFIG_RIGHT_FRONT)
+
+#define HP_FEATURE_CONTROLS()                                               \
+        APP_USBD_U16_TO_RAW_DSC(APP_USBD_AUDIO_FEATURE_UNIT_CONTROL_MUTE),  \
+        APP_USBD_U16_TO_RAW_DSC(APP_USBD_AUDIO_FEATURE_UNIT_CONTROL_MUTE),  \
+        APP_USBD_U16_TO_RAW_DSC(APP_USBD_AUDIO_FEATURE_UNIT_CONTROL_MUTE)
+
+APP_USBD_AUDIO_FORMAT_DESCRIPTOR(m_hp_form_desc, 
+                                 APP_USBD_AUDIO_AS_FORMAT_III_DSC(    /* Format type 3 descriptor */
+                                    2,                                /* Number of channels */
+                                    2,                                /* Subframe size */
+                                    16,                               /* Bit resolution */
+                                    1,                                /* Frequency type */
+                                    APP_USBD_U24_TO_RAW_DSC(48000))   /* Frequency */
+                                );
+
+APP_USBD_AUDIO_INPUT_DESCRIPTOR(m_hp_inp_desc, 
+                                APP_USBD_AUDIO_INPUT_TERMINAL_DSC(
+                                    1,                                     /* Terminal ID */
+                                    APP_USBD_AUDIO_TERMINAL_USB_STREAMING, /* Terminal type */
+                                    2,                                     /* Number of channels */
+                                    HP_TERMINAL_CH_CONFIG())               /* Channels config */
+                               );
+
+APP_USBD_AUDIO_OUTPUT_DESCRIPTOR(m_hp_out_desc, 
+                                 APP_USBD_AUDIO_OUTPUT_TERMINAL_DSC(
+                                    3,                                      /* Terminal ID */
+                                    APP_USBD_AUDIO_TERMINAL_OUT_HEADPHONES, /* Terminal type */
+                                    2)                                      /* Source ID */
+                                );
+
+APP_USBD_AUDIO_FEATURE_DESCRIPTOR(m_hp_fea_desc, 
+                                  APP_USBD_AUDIO_FEATURE_UNIT_DSC(
+                                    2,                     /* Unit ID */
+                                    1,                     /* Source ID */
+                                    HP_FEATURE_CONTROLS()) /* List of controls */
+                                 );
+
+/* Interfaces lists */
+APP_USBD_AUDIO_GLOBAL_DEF(m_app_audio_headphone,
+                          HP_INTERFACES_CONFIG(),
+                          hp_audio_user_ev_handler,
+                          &m_hp_form_desc,
+                          &m_hp_inp_desc,
+                          &m_hp_out_desc,
+                          &m_hp_fea_desc,
+                          0,
+                          APP_USBD_AUDIO_AS_IFACE_FORMAT_PCM,
+                          192,
+                          APP_USBD_AUDIO_SUBCLASS_AUDIOSTREAMING,
+                          1);
 
 APP_USBD_HID_MOUSE_GLOBAL_DEF(m_app_hid_mouse,
                               APP_USBD_INTERFACE_MOUSE,
-                              NRF_DRV_USBD_EPIN1,
+                              NRF_DRV_USBD_EPIN2,
                               CONFIG_MOUSE_BUTTON_COUNT,
                               hid_mouse_user_ev_handler,
                               APP_USBD_HID_SUBCLASS_BOOT
@@ -423,10 +484,95 @@ APP_USBD_HID_MOUSE_GLOBAL_DEF(m_app_hid_mouse,
 
 APP_USBD_HID_KBD_GLOBAL_DEF(m_app_hid_kbd,
                             APP_USBD_INTERFACE_KBD,
-                            NRF_DRV_USBD_EPIN2,
+                            NRF_DRV_USBD_EPIN3,
                             hid_kbd_user_ev_handler,
                             APP_USBD_HID_SUBCLASS_BOOT
 );
+
+static uint8_t m_mute_hp;
+static uint32_t m_freq_hp;
+
+static void hp_audio_user_class_req(app_usbd_class_inst_t const * p_inst)
+{
+    app_usbd_audio_t const * p_audio = app_usbd_audio_class_get(p_inst);
+    app_usbd_audio_req_t * p_req = app_usbd_audio_class_request_get(p_audio);
+
+    UNUSED_VARIABLE(m_mute_hp);
+    UNUSED_VARIABLE(m_freq_hp);
+
+    switch (p_req->req_target)
+    {
+        case APP_USBD_AUDIO_CLASS_REQ_IN:
+
+            if (p_req->req_type == APP_USBD_AUDIO_REQ_SET_CUR)
+            {
+                //Only mute control is defined
+                p_req->payload[0] = m_mute_hp;
+            }
+
+            break;
+        case APP_USBD_AUDIO_CLASS_REQ_OUT:
+
+            if (p_req->req_type == APP_USBD_AUDIO_REQ_SET_CUR)
+            {
+                //Only mute control is defined
+                m_mute_hp = p_req->payload[0];
+            }
+
+            break;
+        case APP_USBD_AUDIO_EP_REQ_IN:
+            break;
+        case APP_USBD_AUDIO_EP_REQ_OUT:
+
+            if (p_req->req_type == APP_USBD_AUDIO_REQ_SET_CUR)
+            {
+                //Only set frequency is supported
+                m_freq_hp = uint24_decode(p_req->payload);
+            }
+
+            break;
+        default:
+            break;
+    }
+}
+
+static int16_t  m_temp_buffer[2 * BUFFER_SIZE];
+
+static void hp_sof_ev_handler(uint16_t framecnt)
+{
+    UNUSED_VARIABLE(framecnt);
+    if (APP_USBD_STATE_Configured != app_usbd_core_state_get())
+    {
+        return;
+    }
+    size_t rx_size = app_usbd_audio_class_rx_size_get(&m_app_audio_headphone.base);
+    
+    if (rx_size > 0)
+    {
+        ASSERT(rx_size <= sizeof(m_temp_buffer));
+
+        ret_code_t err_code;
+        err_code = app_usbd_audio_class_rx_start(&m_app_audio_headphone.base, m_temp_buffer, rx_size);
+        APP_ERROR_CHECK(err_code);
+    }
+}
+
+static void hp_audio_user_ev_handler(app_usbd_class_inst_t const * p_inst,
+                                     app_usbd_audio_user_event_t   event)
+{
+    app_usbd_audio_t const * p_audio = app_usbd_audio_class_get(p_inst);
+    UNUSED_VARIABLE(p_audio);
+    switch (event)
+    {
+        case APP_USBD_AUDIO_USER_EVT_CLASS_REQ:
+            hp_audio_user_class_req(p_inst);
+            break;
+        case APP_USBD_AUDIO_USER_EVT_RX_DONE:
+            break;
+        default:
+            break;
+    }
+}
 
 static void repeated_timer_handler(void * p_context)
 {
@@ -461,17 +607,14 @@ static void repeated_timer_handler(void * p_context)
     */
 
     // update our mouse
-    static bool toggle = true;
-
-    for(int i=0; i < CONFIG_MOUSE_BUTTON_COUNT; i++) {
-        app_usbd_hid_mouse_button_state(&m_app_hid_mouse, i, (m >> i) & 1);
-    }
+    static float angle = 0.0f;
+   
+    app_usbd_hid_mouse_x_move(&m_app_hid_mouse, (int8_t)(sinf(angle)*64.0f));
+    app_usbd_hid_mouse_y_move(&m_app_hid_mouse, (int8_t)(cosf(angle)*64.0f));
+    //app_usbd_hid_mouse_scroll_move(&m_app_hid_mouse, 1);
+    //app_usbd_hid_mouse_button_state(&m_app_hid_mouse, 0, m & 1);
     
-    app_usbd_hid_mouse_x_move(&m_app_hid_mouse, toggle ? 127 : -127);
-    app_usbd_hid_mouse_y_move(&m_app_hid_mouse, toggle ? 127 : -127);
-    app_usbd_hid_mouse_scroll_move(&m_app_hid_mouse, toggle ? 127 : -127);
-    
-    toggle = !toggle;
+    angle += 3.14159f / 128.0f;
     m++;
 }
 
@@ -542,11 +685,20 @@ static void usb_stack_init()
 
     static const app_usbd_config_t usbd_config = {
         .ev_state_proc = usbd_user_ev_handler,
+        .enable_sof = true
     };
 
     err_code = app_usbd_init(&usbd_config);
     APP_ERROR_CHECK(err_code);
 
+    app_usbd_class_inst_t const * class_inst_hp;
+    class_inst_hp = app_usbd_audio_class_inst_get(&m_app_audio_headphone);
+    err_code = app_usbd_audio_sof_interrupt_register(class_inst_hp, hp_sof_ev_handler);
+    APP_ERROR_CHECK(err_code);
+    err_code = app_usbd_class_append(class_inst_hp);
+    APP_ERROR_CHECK(err_code);
+
+    /*
     app_usbd_class_inst_t const * class_inst_kbd;
     class_inst_kbd = app_usbd_hid_kbd_class_inst_get(&m_app_hid_kbd);
     err_code = app_usbd_class_append(class_inst_kbd);
@@ -556,6 +708,7 @@ static void usb_stack_init()
     class_inst_mouse = app_usbd_hid_mouse_class_inst_get(&m_app_hid_mouse);
     err_code = app_usbd_class_append(class_inst_mouse);
     APP_ERROR_CHECK(err_code);
+    */
 
     app_usbd_enable();
     app_usbd_start();

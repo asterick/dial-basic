@@ -489,6 +489,10 @@
 #define APP_USBD_HID_MOUSE_ENABLED 1
 #endif
 
+#ifndef APP_USBD_AUDIO_ENABLED
+#define APP_USBD_AUDIO_ENABLED 1
+#endif
+
 //==========================================================
 // <q> BLE_ADVERTISING_ENABLED  - ble_advertising - Advertising module
  
