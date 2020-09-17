@@ -458,6 +458,7 @@ static void hid_kbd_user_ev_handler(app_usbd_class_inst_t const * p_inst,
         case APP_USBD_HID_USER_EVT_OUT_REPORT_READY:
             break;
         case APP_USBD_HID_USER_EVT_IN_REPORT_DONE:
+            repeated_timer_handler(NULL);
             break;
         case APP_USBD_HID_USER_EVT_SET_BOOT_PROTO:
             UNUSED_RETURN_VALUE(hid_kbd_clear_buffer(p_inst));
@@ -535,7 +536,7 @@ int main(void)
     advertising_start();
 
     err_code = app_timer_create(&m_repeated_timer_id,
-                                APP_TIMER_MODE_REPEATING,
+                                APP_TIMER_MODE_SINGLE_SHOT,
                                 repeated_timer_handler);
 
     app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(5000), NULL);
