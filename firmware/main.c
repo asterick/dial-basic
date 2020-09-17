@@ -430,10 +430,14 @@ APP_USBD_HID_KBD_GLOBAL_DEF(m_app_hid_kbd,
 
 static void repeated_timer_handler(void * p_context)
 {
-    static uint8_t v = 0;
     static uint8_t m = 0;
 
+    /*
+    for (int i = 4; i <= 0xFF; i++) {
+        app_usbd_hid_kbd_key_control(&m_app_hid_kbd, i, false);
+    }
     while (true) {
+        static uint8_t v = 0;
         switch (++v) {
             case 0: case 1: case 2: case 3: // these are error codes
             case 6: case 15: // C/M have hotkeys is bad, 
@@ -448,19 +452,15 @@ static void repeated_timer_handler(void * p_context)
             case 228: case 229: case 230: case 231:
                 v++; continue ;
         }
+        app_usbd_hid_kbd_key_control(&m_app_hid_kbd, v, true);
         break ;
     }
 
-    for (int i = 4; i <= 0xFF; i++) {
-        app_usbd_hid_kbd_key_control(&m_app_hid_kbd, i, false);
-    }
-    app_usbd_hid_kbd_key_control(&m_app_hid_kbd, v, true);
-
-    //app_usbd_hid_kbd_modifier_state_set(&m_app_hid_kbd, 0xFF, false);
-    //app_usbd_hid_kbd_modifier_state_set(&m_app_hid_kbd, m, true);
+    app_usbd_hid_kbd_modifier_state_set(&m_app_hid_kbd, 0xFF, false);
+    app_usbd_hid_kbd_modifier_state_set(&m_app_hid_kbd, m, true);
+    */
 
     // update our mouse
-    /*
     static bool toggle = true;
 
     for(int i=0; i < CONFIG_MOUSE_BUTTON_COUNT; i++) {
@@ -472,7 +472,6 @@ static void repeated_timer_handler(void * p_context)
     app_usbd_hid_mouse_scroll_move(&m_app_hid_mouse, toggle ? 127 : -127);
     
     toggle = !toggle;
-    */
     m++;
 }
 
@@ -553,12 +552,10 @@ static void usb_stack_init()
     err_code = app_usbd_class_append(class_inst_kbd);
     APP_ERROR_CHECK(err_code);
     
-    /*
     app_usbd_class_inst_t const * class_inst_mouse;
     class_inst_mouse = app_usbd_hid_mouse_class_inst_get(&m_app_hid_mouse);
     err_code = app_usbd_class_append(class_inst_mouse);
     APP_ERROR_CHECK(err_code);
-    */
 
     app_usbd_enable();
     app_usbd_start();
@@ -587,7 +584,7 @@ int main(void)
     advertising_start();
 
     err_code = app_timer_create(&m_repeated_timer_id,
-                                APP_TIMER_MODE_SINGLE_SHOT,
+                                APP_TIMER_MODE_REPEATED,
                                 repeated_timer_handler);
 
     app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(200), NULL);
