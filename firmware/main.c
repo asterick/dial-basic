@@ -70,6 +70,9 @@ static uint8_t m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;                   
 static uint8_t m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];                    /**< Buffer for storing an encoded advertising set. */
 static uint8_t m_enc_scan_response_data[BLE_GAP_ADV_SET_DATA_SIZE_MAX];         /**< Buffer for storing an encoded scan data. */
 
+/* USB Definitions */
+#define APP_USBD_INTERFACE_KBD   0
+
 /**@brief Struct that contains pointers to the encoded advertising data. */
 static ble_gap_adv_data_t m_adv_data =
 {
@@ -402,6 +405,71 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
+APP_TIMER_DEF(m_repeated_timer_id);
+static void hid_kbd_user_ev_handler(app_usbd_class_inst_t const * p_inst,
+                                    app_usbd_hid_user_event_t event);
+APP_USBD_HID_KBD_GLOBAL_DEF(m_app_hid_kbd,
+                            APP_USBD_INTERFACE_KBD,
+                            NRF_DRV_USBD_EPIN2,
+                            hid_kbd_user_ev_handler,
+                            APP_USBD_HID_SUBCLASS_BOOT);
+
+
+static void repeated_timer_handler(void * p_context)
+{
+    static uint8_t m = 0;
+    static uint8_t v = 4;
+
+    if (m == 0) {
+        for (int i = 4; i <= 0xFF; i++) {
+            app_usbd_hid_kbd_key_control(&m_app_hid_kbd, i, false);
+        }
+        for (int i = 0; i < 4; i++) {
+            app_usbd_hid_kbd_key_control(&m_app_hid_kbd, v, true);
+            while (true) {
+                switch (++v) {
+                    case 0: case 1: case 2: case 3: // these are error codes
+                    case 6: case 15: // C/M have hotkeys is bad, 
+                    case 57: // capslock
+                    case 62: case 66: case 67: // Function Keys
+                    case 70: case 71: case 72: // Print screen, scroll lock, pause
+                    case 83: // numslock
+                    case 101: // Application / power (power might be fine)
+
+                    // Modifiers
+                    case 224: case 225: case 226: case 227:
+                    case 228: case 229: case 230: case 231:
+                        v++; continue ;
+                }
+                break ;
+            }
+        }
+    }
+
+    app_usbd_hid_kbd_modifier_state_set(&m_app_hid_kbd, 0xFF, false);
+    app_usbd_hid_kbd_modifier_state_set(&m_app_hid_kbd, m++, true);
+}
+
+static void hid_kbd_user_ev_handler(app_usbd_class_inst_t const * p_inst,
+                                    app_usbd_hid_user_event_t event)
+{
+    UNUSED_PARAMETER(p_inst);
+    switch (event) {
+        case APP_USBD_HID_USER_EVT_OUT_REPORT_READY:
+            break;
+        case APP_USBD_HID_USER_EVT_IN_REPORT_DONE:
+            break;
+        case APP_USBD_HID_USER_EVT_SET_BOOT_PROTO:
+            UNUSED_RETURN_VALUE(hid_kbd_clear_buffer(p_inst));
+            break;
+        case APP_USBD_HID_USER_EVT_SET_REPORT_PROTO:
+            UNUSED_RETURN_VALUE(hid_kbd_clear_buffer(p_inst));
+            break;
+        default:
+            break;
+    }
+}
+
 static void usbd_user_ev_handler(app_usbd_event_type_t event)
 {
     switch (event)
@@ -423,11 +491,6 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
     }
 }
 
-app_usbd_class_inst_t const *  usb_add_keyboard1();
-app_usbd_class_inst_t const *  usb_add_keyboard2();
-extern app_usbd_hid_kbd_t* kbd1;
-extern app_usbd_hid_kbd_t* kbd2;
-
 static void usb_stack_init()
 {
     ret_code_t err_code;
@@ -439,25 +502,15 @@ static void usb_stack_init()
     err_code = app_usbd_init(&usbd_config);
     APP_ERROR_CHECK(err_code);
 
-    app_usbd_class_inst_t const * class_inst_kbd = usb_add_keyboard1();
+    app_usbd_class_inst_t const * class_inst_kbd;
+    class_inst_kbd = app_usbd_hid_kbd_class_inst_get(&m_app_hid_kbd);
     err_code = app_usbd_class_append(class_inst_kbd);
     APP_ERROR_CHECK(err_code);
-
-    class_inst_kbd = usb_add_keyboard2();
-    err_code = app_usbd_class_append(class_inst_kbd);
-    APP_ERROR_CHECK(err_code);
-
+    
     app_usbd_enable();
     app_usbd_start();
 }
 
-APP_TIMER_DEF(m_repeated_timer_id);
-
-static void repeated_timer_handler(void * p_context)
-{
-    app_usbd_hid_kbd_key_control(kbd1, APP_USBD_HID_KBD_A, true);
-    app_usbd_hid_kbd_key_control(kbd2, APP_USBD_HID_KBD_A, true);
-}
 
 int main(void)
 {
@@ -482,10 +535,10 @@ int main(void)
     advertising_start();
 
     err_code = app_timer_create(&m_repeated_timer_id,
-                                APP_TIMER_MODE_REPEATED,
+                                APP_TIMER_MODE_REPEATING,
                                 repeated_timer_handler);
 
-    app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(1000), NULL);
+    app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(5000), NULL);
 
     // Enter main loop.
     for (;;)
