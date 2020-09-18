@@ -5,10 +5,7 @@
 
 #include "nordic_common.h"
 #include "nrf.h"
-#include "nrf_drv_usbd.h"
-#include "nrf_drv_clock.h"
-#include "app_util.h"
-#include "app_error.h"
+
 #include "ble.h"
 #include "ble_err.h"
 #include "ble_hci.h"
@@ -19,7 +16,6 @@
 #include "nrf_sdh_ble.h"
 #include "nrf_ble_gatt.h"
 #include "app_timer.h"
-#include "app_error.h"
 
 #define DEVICE_NAME                     "DialBasic"                             /**< Name of device. Will be included in the advertising data. */
 
