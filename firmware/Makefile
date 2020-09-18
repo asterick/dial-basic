@@ -62,6 +62,9 @@ SRC_FILES += \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_ble.c \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_soc.c \
   $(PROJ_DIR)/app_usbd_hid_kbd.c \
+  $(PROJ_DIR)/keyboard.c \
+  $(PROJ_DIR)/bluetooth.c \
+  $(PROJ_DIR)/headphones.c \
   $(PROJ_DIR)/main.c \
   
 # Include folders common to all targets
