@@ -9,7 +9,7 @@
 #include "app_usbd_audio.h"
 
 /* USB Definitions */
-#define HP_INTERFACES_CONFIG()      APP_USBD_AUDIO_CONFIG_OUT(6, 7)
+#define HP_INTERFACES_CONFIG()      APP_USBD_AUDIO_CONFIG_OUT(7, 8)
 
 static void hp_audio_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                      app_usbd_audio_user_event_t   event);
@@ -117,6 +117,7 @@ static void hp_audio_user_class_req(app_usbd_class_inst_t const * p_inst)
 }
 
 static int16_t  m_temp_buffer[2 * BUFFER_SIZE];
+uint8_t   not_zero = 0;
 
 static void hp_sof_ev_handler(uint16_t framecnt)
 {
@@ -134,6 +135,10 @@ static void hp_sof_ev_handler(uint16_t framecnt)
         ret_code_t err_code;
         err_code = app_usbd_audio_class_rx_start(&m_app_audio_headphone.base, m_temp_buffer, rx_size);
         APP_ERROR_CHECK(err_code);
+
+        for (int i = 0; i < BUFFER_SIZE*2; i++) {
+            if (m_temp_buffer[i] != 0) not_zero++;
+        }
     }
 }
 
