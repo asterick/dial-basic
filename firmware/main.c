@@ -6,6 +6,7 @@
 
 #include "headphones.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "bluetooth.h"
 
 
@@ -47,7 +48,7 @@ static void usb_stack_init()
 
     app_usbd_headphones_init();
     app_usbd_keyboard_init();
-
+    app_usbd_mouse_init();
     app_usbd_enable();
     app_usbd_start();
 }

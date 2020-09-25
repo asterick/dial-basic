@@ -54,6 +54,7 @@ SRC_FILES += \
   $(SDK_ROOT)/integration/nrfx/legacy/nrf_drv_power.c \
   $(SDK_ROOT)/integration/nrfx/legacy/nrf_drv_clock.c \
   $(PROJ_DIR)/app_usbd_hid_kbd.c \
+  $(PROJ_DIR)/mouse.c \
   $(PROJ_DIR)/keyboard.c \
   $(PROJ_DIR)/bluetooth.c \
   $(PROJ_DIR)/headphones.c \

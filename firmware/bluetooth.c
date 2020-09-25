@@ -38,9 +38,12 @@
 
 #define SERIAL_UUID_BASE        {0x68, 0x3f, 0x2c, 0x08, 0xf8, 0x71, 0x11, 0xea, \
                                  0xa1, 0x3a, 0x70, 0x85, 0xc2, 0xcc, 0x42, 0x5a}
-#define SERIAL_UUID_SERVICE     0xBA5C
-#define SERIAL_UUID_READ_CHAR   0xBA5D
-#define SERIAL_UUID_WRITE_CHAR  0xBA5E
+#define SERIAL_UUID_SERVICE          0xBA50
+#define SERIAL_UUID_DATA_READ_CHAR   0xBA51
+#define SERIAL_UUID_DATA_WRITE_CHAR  0xBA52
+#define SERIAL_UUID_KBD_STATUS_CHAR  0xBA53
+#define SERIAL_UUID_KBD_WRITE_CHAR   0xBA54
+#define SERIAL_UUID_MOUSE_WRITE_CHAR 0xBA55
 #define BLE_SERIAL_BLE_OBSERVER_PRIO 2
 
 uint8_t VERSION_NUMBER[] = {0x20, 0x20, 0x09, 0x16};
@@ -49,8 +52,11 @@ uint8_t VERSION_NUMBER[] = {0x20, 0x20, 0x09, 0x16};
 typedef struct ble_serial_s
 {
     uint16_t                   service_handle;      /**< Handle of serial service (as provided by the BLE stack). */
-    ble_gatts_char_handles_t   write_char_handles;  /**< Handles related to the write Characteristic. */
-    ble_gatts_char_handles_t   read_char_handles;   /**< Handles related to the read Characteristic. */
+    ble_gatts_char_handles_t   data_write_char_handles;  /**< Handles related to the write Characteristic. */
+    ble_gatts_char_handles_t   data_read_char_handles;   /**< Handles related to the read Characteristic. */
+    ble_gatts_char_handles_t   kbd_status_char_handles;   /**< Handles related to the read Characteristic. */
+    ble_gatts_char_handles_t   kbd_write_char_handles;  /**< Handles related to the write Characteristic. */
+    ble_gatts_char_handles_t   mouse_write_char_handles;  /**< Handles related to the write Characteristic. */
     uint8_t                    uuid_type;           /**< UUID type for the serial service. */
 } ble_serial_t;
 
@@ -144,9 +150,13 @@ static void ble_serial_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
     switch (p_ble_evt->header.evt_id)
     {
         case BLE_GATTS_EVT_WRITE:
-            if (   (p_evt_write->handle == m_serial.write_char_handles.value_handle)
-                && (p_evt_write->len >= 1))
-            {
+            if (p_evt_write->handle == m_serial.data_write_char_handles.value_handle) {
+                // TODO: HANDLE WRITE HERE
+            }
+            else if (p_evt_write->handle == m_serial.kbd_write_char_handles.value_handle) {
+                // TODO: HANDLE WRITE HERE
+            }
+            else if (p_evt_write->handle == m_serial.mouse_write_char_handles.value_handle) {
                 // TODO: HANDLE WRITE HERE
             }
             break;
@@ -163,7 +173,7 @@ uint32_t ble_serial_write(uint16_t conn_handle, uint8_t *data, uint16_t len)
 
     memset(&params, 0, sizeof(params));
     params.type   = BLE_GATT_HVX_NOTIFICATION;
-    params.handle = m_serial.read_char_handles.value_handle;
+    params.handle = m_serial.data_read_char_handles.value_handle;
     params.p_data = data;
     params.p_len  = &len;
 
@@ -253,9 +263,9 @@ static void ble_serial_init()
     err_code = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &m_serial.service_handle);
     APP_ERROR_CHECK(err_code);
 
-    // Add read characteristic.
+    // Add stream read/write characteristics.
     memset(&add_char_params, 0, sizeof(add_char_params));
-    add_char_params.uuid              = SERIAL_UUID_READ_CHAR;
+    add_char_params.uuid              = SERIAL_UUID_DATA_READ_CHAR;
     add_char_params.uuid_type         = m_serial.uuid_type;
     add_char_params.init_len          = sizeof(uint8_t);
     add_char_params.max_len           = sizeof(uint8_t);
@@ -267,12 +277,11 @@ static void ble_serial_init()
 
     err_code = characteristic_add(m_serial.service_handle,
                                   &add_char_params,
-                                  &m_serial.read_char_handles);
+                                  &m_serial.data_read_char_handles);
     APP_ERROR_CHECK(err_code);
 
-    // Add write characteristic.
     memset(&add_char_params, 0, sizeof(add_char_params));
-    add_char_params.uuid             = SERIAL_UUID_WRITE_CHAR;
+    add_char_params.uuid             = SERIAL_UUID_DATA_WRITE_CHAR;
     add_char_params.uuid_type        = m_serial.uuid_type;
     add_char_params.init_len         = sizeof(uint8_t);
     add_char_params.max_len          = sizeof(uint8_t);
@@ -282,7 +291,53 @@ static void ble_serial_init()
     add_char_params.read_access  = SEC_OPEN;
     add_char_params.write_access = SEC_OPEN;
 
-    err_code = characteristic_add(m_serial.service_handle, &add_char_params, &m_serial.write_char_handles);
+    err_code = characteristic_add(m_serial.service_handle, &add_char_params, &m_serial.data_write_char_handles);
+    APP_ERROR_CHECK(err_code);
+
+    // Add keyboard characteristics
+    memset(&add_char_params, 0, sizeof(add_char_params));
+    add_char_params.uuid              = SERIAL_UUID_KBD_STATUS_CHAR;
+    add_char_params.uuid_type         = m_serial.uuid_type;
+    add_char_params.init_len          = sizeof(uint8_t);
+    add_char_params.max_len           = sizeof(uint8_t);
+    add_char_params.char_props.read   = 1;
+    add_char_params.char_props.notify = 1;
+
+    add_char_params.read_access       = SEC_OPEN;
+    add_char_params.cccd_write_access = SEC_OPEN;
+
+    err_code = characteristic_add(m_serial.service_handle,
+                                  &add_char_params,
+                                  &m_serial.kbd_status_char_handles);
+    APP_ERROR_CHECK(err_code);
+
+    memset(&add_char_params, 0, sizeof(add_char_params));
+    add_char_params.uuid             = SERIAL_UUID_KBD_WRITE_CHAR;
+    add_char_params.uuid_type        = m_serial.uuid_type;
+    add_char_params.init_len         = sizeof(uint8_t);
+    add_char_params.max_len          = sizeof(uint8_t);
+    add_char_params.char_props.read  = 1;
+    add_char_params.char_props.write = 1;
+
+    add_char_params.read_access  = SEC_OPEN;
+    add_char_params.write_access = SEC_OPEN;
+
+    err_code = characteristic_add(m_serial.service_handle, &add_char_params, &m_serial.kbd_write_char_handles);
+    APP_ERROR_CHECK(err_code);
+
+    // Add mouse characteristics
+    memset(&add_char_params, 0, sizeof(add_char_params));
+    add_char_params.uuid             = SERIAL_UUID_MOUSE_WRITE_CHAR;
+    add_char_params.uuid_type        = m_serial.uuid_type;
+    add_char_params.init_len         = sizeof(uint8_t);
+    add_char_params.max_len          = sizeof(uint8_t);
+    add_char_params.char_props.read  = 1;
+    add_char_params.char_props.write = 1;
+
+    add_char_params.read_access  = SEC_OPEN;
+    add_char_params.write_access = SEC_OPEN;
+
+    err_code = characteristic_add(m_serial.service_handle, &add_char_params, &m_serial.mouse_write_char_handles);
     APP_ERROR_CHECK(err_code);
 }
 
