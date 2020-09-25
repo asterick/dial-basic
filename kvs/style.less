@@ -1,12 +1,34 @@
+@header-height: 4ch;
+
 body {
     background: black;
+}
+
+.blur {
+    filter: blur(4px);
 }
 
 .video {
     position:absolute;
     z-index:-1;
-    top:0;
+    top:@header-height;
     left:0;
     width:100%; 
-    height:100vh;
+    height:calc(100vh - @header-height);
+}
+
+.header {
+    position: absolute;
+    display: inline-block;
+    box-sizing: border-box;
+
+    padding: 0px 2ch;
+
+    top: 0;
+    left: 0;
+    right: 0;
+    height: @header-height;
+    background:#444;
+    color: #fff;
+    border-bottom: 2px solid #000;
 }
