@@ -9,6 +9,8 @@
 #include "app_usbd.h"
 #include "app_usbd_hid_kbd.h"
 
+#include "bluetooth.h"
+
 #define APP_USBD_INTERFACE_KBD1     0
 #define APP_USBD_INTERFACE_KBD2     1
 #define APP_USBD_INTERFACE_KBD3     2
@@ -146,8 +148,10 @@ void keyboard_set_scanids(const uint8_t* keys, uint16_t len) {
     }
 
     // Set keyboard0 to the proper state
-    memcpy(p_kbd_ctx->rep.key_table, keys, len < 6 ? len : 6);
     p_kbd_ctx = &keyboards[0]->specific.p_data->ctx;
+    for (int i = 0; i < sizeof(p_kbd_ctx->rep.key_table); i++) {
+        p_kbd_ctx->rep.key_table[i] = (i < len) ? keys[i] : 0;
+    }
     for (int i = 0; i < len; i++) {
         if (keys[i] >= 0xE0 && keys[i] <= 0xE7) {
             p_kbd_ctx->rep.modifier = 1 << (keys[i] & 7);
@@ -173,6 +177,9 @@ static void hid_kbd_user_ev_handler(app_usbd_class_inst_t const * p_inst,
     UNUSED_PARAMETER(p_inst);
     switch (event) {
         case APP_USBD_HID_USER_EVT_OUT_REPORT_READY:
+            {
+                ble_kbd_status_write(m_app_hid_kbd1.specific.p_data->ctx.leds_state);
+            }
             break;
         case APP_USBD_HID_USER_EVT_IN_REPORT_DONE:
             break;

@@ -40,14 +40,13 @@
 #define DEAD_BEEF                       0xDEADBEEF                              /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
 #define SERIAL_UUID_BASE        {0x68, 0x3f, 0x2c, 0x08, 0xf8, 0x71, 0x11, 0xea, \
-                                 0xa1, 0x3a, 0x70, 0x85, 0xc2, 0xcc, 0x42, 0x5a}
+                                 0xa1, 0x3a, 0x70, 0x85, 0x50, 0xba, 0x42, 0x5a}
 #define SERIAL_UUID_SERVICE          0xBA50
 #define SERIAL_UUID_DATA_READ_CHAR   0xBA51
 #define SERIAL_UUID_DATA_WRITE_CHAR  0xBA52
 #define SERIAL_UUID_KBD_STATUS_CHAR  0xBA53
 #define SERIAL_UUID_KBD_WRITE_CHAR   0xBA54
 #define SERIAL_UUID_MOUSE_WRITE_CHAR 0xBA55
-#define BLE_SERIAL_BLE_OBSERVER_PRIO 2
 
 uint8_t VERSION_NUMBER[] = {0x20, 0x20, 0x09, 0x16};
 
@@ -148,31 +147,6 @@ void ble_advertising_start(void)
     APP_ERROR_CHECK(err_code);
 }
 
-static void ble_serial_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
-{
-    ble_gatts_evt_write_t const * p_evt_write = &p_ble_evt->evt.gatts_evt.params.write;
-
-    switch (p_ble_evt->header.evt_id)
-    {
-        case BLE_GATTS_EVT_WRITE:
-            if (p_evt_write->handle == m_serial.data_write_char_handles.value_handle) {
-                // TODO: HANDLE WRITE HERE
-            }
-            else if (p_evt_write->handle == m_serial.kbd_write_char_handles.value_handle) {
-                keyboard_set_scanids(p_evt_write->data, p_evt_write->len);
-            }
-            else if (p_evt_write->handle == m_serial.mouse_write_char_handles.value_handle &&
-                    p_evt_write->len == 4) {
-                mouse_adjust_movement(p_evt_write->data[0], p_evt_write->data[1], p_evt_write->data[2], p_evt_write->data[3]);
-            }
-            break;
-
-        default:
-            // No implementation needed.
-            break;
-    }
-}
-
 uint32_t ble_serial_write(uint8_t *data, uint16_t len)
 {
     ble_gatts_hvx_params_t params;
@@ -210,10 +184,24 @@ uint32_t ble_kbd_status_write(uint8_t data)
  */
 static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
 {
+    ble_gatts_evt_write_t const * p_evt_write = &p_ble_evt->evt.gatts_evt.params.write;
     ret_code_t err_code;
 
     switch (p_ble_evt->header.evt_id)
     {
+        case BLE_GATTS_EVT_WRITE:
+            if (p_evt_write->handle == m_serial.data_write_char_handles.value_handle) {
+                // TODO: HANDLE WRITE HERE
+            }
+            else if (p_evt_write->handle == m_serial.kbd_write_char_handles.value_handle) {
+                keyboard_set_scanids(p_evt_write->data, p_evt_write->len);
+            }
+            else if (p_evt_write->handle == m_serial.mouse_write_char_handles.value_handle &&
+                    p_evt_write->len == 4) {
+                mouse_adjust_movement(p_evt_write->data[0], p_evt_write->data[1], p_evt_write->data[2], p_evt_write->data[3]);
+            }
+            break;
+
         case BLE_GAP_EVT_CONNECTED:
             m_led_status = ~0;
             ble_kbd_status_write(0);
@@ -293,8 +281,8 @@ static void ble_serial_init()
     memset(&add_char_params, 0, sizeof(add_char_params));
     add_char_params.uuid              = SERIAL_UUID_DATA_READ_CHAR;
     add_char_params.uuid_type         = m_serial.uuid_type;
-    add_char_params.init_len          = sizeof(uint8_t);
-    add_char_params.max_len           = sizeof(uint8_t);
+    add_char_params.init_len          = 256;
+    add_char_params.max_len           = 256;
     add_char_params.char_props.read   = 1;
     add_char_params.char_props.notify = 1;
 
@@ -309,9 +297,8 @@ static void ble_serial_init()
     memset(&add_char_params, 0, sizeof(add_char_params));
     add_char_params.uuid             = SERIAL_UUID_DATA_WRITE_CHAR;
     add_char_params.uuid_type        = m_serial.uuid_type;
-    add_char_params.init_len         = sizeof(uint8_t);
-    add_char_params.max_len          = sizeof(uint8_t);
-    add_char_params.char_props.read  = 1;
+    add_char_params.init_len         = 256;
+    add_char_params.max_len          = 256;
     add_char_params.char_props.write = 1;
 
     add_char_params.read_access  = SEC_OPEN;
@@ -324,8 +311,8 @@ static void ble_serial_init()
     memset(&add_char_params, 0, sizeof(add_char_params));
     add_char_params.uuid              = SERIAL_UUID_KBD_STATUS_CHAR;
     add_char_params.uuid_type         = m_serial.uuid_type;
-    add_char_params.init_len          = sizeof(uint8_t);
-    add_char_params.max_len           = sizeof(uint8_t);
+    add_char_params.init_len          = sizeof(m_led_status);
+    add_char_params.max_len           = sizeof(m_led_status);
     add_char_params.char_props.read   = 1;
     add_char_params.char_props.notify = 1;
 
@@ -340,9 +327,8 @@ static void ble_serial_init()
     memset(&add_char_params, 0, sizeof(add_char_params));
     add_char_params.uuid             = SERIAL_UUID_KBD_WRITE_CHAR;
     add_char_params.uuid_type        = m_serial.uuid_type;
-    add_char_params.init_len         = sizeof(uint8_t);
-    add_char_params.max_len          = sizeof(uint8_t);
-    add_char_params.char_props.read  = 1;
+    add_char_params.init_len         = 6+8;
+    add_char_params.max_len          = 6+8;
     add_char_params.char_props.write = 1;
 
     add_char_params.read_access  = SEC_OPEN;
@@ -355,13 +341,12 @@ static void ble_serial_init()
     memset(&add_char_params, 0, sizeof(add_char_params));
     add_char_params.uuid             = SERIAL_UUID_MOUSE_WRITE_CHAR;
     add_char_params.uuid_type        = m_serial.uuid_type;
-    add_char_params.init_len         = sizeof(uint8_t);
-    add_char_params.max_len          = sizeof(uint8_t);
-    add_char_params.char_props.read  = 1;
+    add_char_params.init_len         = 4;
+    add_char_params.max_len          = 4;
     add_char_params.char_props.write = 1;
 
-    add_char_params.read_access  = SEC_OPEN;
-    add_char_params.write_access = SEC_OPEN;
+    add_char_params.read_access     = SEC_OPEN;
+    add_char_params.write_access    = SEC_OPEN;
 
     err_code = characteristic_add(m_serial.service_handle, &add_char_params, &m_serial.mouse_write_char_handles);
     APP_ERROR_CHECK(err_code);
@@ -394,7 +379,6 @@ void ble_stack_init(void)
 
     // Register a handler for BLE events.
     NRF_SDH_BLE_OBSERVER(m_ble_observer, APP_BLE_OBSERVER_PRIO, ble_evt_handler, NULL);
-    NRF_SDH_BLE_OBSERVER(m_serial_observer, BLE_SERIAL_BLE_OBSERVER_PRIO, ble_serial_on_ble_evt, NULL);
 
     // init gap parameters
     BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
