@@ -20,17 +20,17 @@ import React from "react";
 import classnames from "classnames";
 
 import TranslateEventCode from "./keycodes.js"
-import style from "./style.less";
+import style from "./style.css";
 
 export default class KVSDisplay extends React.Component {
 	constructor(props) {
 		super(props);
-		
+
 		this.state = {
 			blur: false,
 			focus: true,
 			active: true,
-			
+
 			locked: false,
 			mouse: { x: 0, y: 0, scroll: 0, buttons: 0 },
 			keys: []
@@ -38,17 +38,17 @@ export default class KVSDisplay extends React.Component {
 
 		this.videoRef = React.createRef();
 		this.topElement = React.createRef();
-		
+
 		this.pointerLock = this.pointerLock.bind(this);
 		this.lockChangeAlert = this.lockChangeAlert.bind(this);
 
 		this.mouseMovement = this.mouseMovement.bind(this);
 		this.mouseWheel = this.mouseWheel.bind(this);
 		this.mouseButtons = this.mouseButtons.bind(this);
-		
+
 		this.keyboardDown = this.keyboardDown.bind(this);
 		this.keyboardUp = this.keyboardUp.bind(this);
-		
+
 		this.visChange = this.visChange.bind(this);
 		this.focus = this.focus.bind(this);
 		this.blur = this.blur.bind(this);
@@ -79,7 +79,7 @@ export default class KVSDisplay extends React.Component {
 		document.addEventListener('mousedown', this.mouseButtons);
 		document.addEventListener('mouseup', this.mouseButtons);
 		document.addEventListener('wheel', this.mouseWheel);
-		
+
 		document.addEventListener('visibilitychange', this.visChange);
 		window.addEventListener('blur', this.blur);
 		window.addEventListener('focus', this.focus);
@@ -93,7 +93,7 @@ export default class KVSDisplay extends React.Component {
 		document.removeEventListener('mousedown', this.mouseButtons);
 		document.removeEventListener('mouseup', this.mouseButtons);
 		document.removeEventListener('wheel', this.mouseWheel);
-		
+
 		document.removeEventListener('visibilitychange', this.visChange);
 		window.removeEventListener('blur', this.blur);
 		window.removeEventListener('focus', this.focus);
@@ -104,7 +104,7 @@ export default class KVSDisplay extends React.Component {
 		if (!e.target.requestPointerLock) {
 			return ;
 		}
-		
+
 		e.target.requestPointerLock();
 	}
 
@@ -143,15 +143,19 @@ export default class KVSDisplay extends React.Component {
 	}
 
 	/* Update device */
-	updateMouse() {
-		//console.log(this.state.mouse)
+	updateMouse(mouse) {
+		const {x,y,scroll,buttons} = this.state.mouse;
+		mouse.x = 0;
+		mouse.y = 0;
+		mouse.scroll = 0;
+		this.props.bluetooth.writeMouse(x,y,scroll,buttons);
 	}
 
 	updateKeyboard() {
 		let keys = Object.keys(this.state.keys).map((k) => k|0);
 		keys.sort();
 
-		console.log(keys)
+		this.props.bluetooth.writeKeys(keys);
 	}
 
 	/* Mouse handlers */
@@ -161,8 +165,8 @@ export default class KVSDisplay extends React.Component {
 		const mouse = this.state.mouse;
 		mouse.x += e.movementX;
 		mouse.y += e.movementY;
+		this.updateMouse(mouse);
 		this.setState(mouse);
-		this.updateMouse();
 	}
 
 	mouseWheel(e) {
@@ -170,8 +174,8 @@ export default class KVSDisplay extends React.Component {
 
 		const mouse = this.state.mouse;
 		mouse.scroll += e.deltaY;
+		this.updateMouse(mouse);
 		this.setState(mouse);
-		this.updateMouse();
 	}
 
 	mouseButtons(e) {
@@ -179,8 +183,8 @@ export default class KVSDisplay extends React.Component {
 
 		const mouse = this.state.mouse;
 		mouse.buttons = e.buttons;
+		this.updateMouse(mouse);
 		this.setState(mouse);
-		this.updateMouse();
 	}
 
 	/* Keyboard handlers */
@@ -189,7 +193,7 @@ export default class KVSDisplay extends React.Component {
 		if (!code) return false ;
 
 		e.preventDefault();
-		
+
 		const keys = this.state.keys;
 		keys[code] = true;
 		this.setState(keys);
@@ -212,14 +216,14 @@ export default class KVSDisplay extends React.Component {
 
 	/* View template */
 	render() {
-        return <video 
+        return <video
             autoPlay={true}
             ref={this.videoRef}
             onClick={this.pointerLock}
             className={classnames({
                 [style.video]: true,
                 [style.blur]: !this.state.active
-            })}  
+            })}
             />
     }
 }

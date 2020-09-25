@@ -31,21 +31,13 @@ module.exports = {
                 ],
             },
             {
-                test: /\.less$/,
+                test: /\.css$/,
                 use: [
                     'style-loader',
                     {
                         loader: 'css-loader',
                         options: {
                             modules: true
-                        }
-                    },
-                    {
-                        loader: 'less-loader',
-                        options: {
-                            lessOptions: {
-                                paths: [path.resolve(__dirname, 'node_modules')]
-                            }
                         }
                     }
                 ],

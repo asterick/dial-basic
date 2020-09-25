@@ -22,7 +22,8 @@ import classnames from "classnames";
 import { FaExpand } from 'react-icons/fa';
 
 import KVS from "./kvs.jsx"
-import style from "./style.less";
+import style from "./style.css";
+import { Bluetooth } from "./bluetooth.js";
 
 export default class Root extends React.Component {
 	constructor(props) {
@@ -48,14 +49,17 @@ export default class Root extends React.Component {
 		return <div ref={this.topElement}>
 			<div className={style.header}>
 				<FaExpand onClick={() => this.toggleFullscreen()}/>
+				<button onClick={() => this.props.bluetooth.connect()}>Connect</button>
 			</div>
-			<KVS />
+			<KVS bluetooth={this.props.bluetooth} />
 		</div>;
 	}
 }
 
 async function main() {
-	ReactDOM.render(<Root />, document.querySelector(".container"));
+	const bluetooth = new Bluetooth();
+
+	ReactDOM.render(<Root bluetooth={bluetooth}/>, document.querySelector(".container"));
 }
 
 main();
