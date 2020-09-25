@@ -48,7 +48,11 @@ export class Bluetooth {
 
         while (true) {
             try {
-                if (this.mouse_dirty) {
+                if (this.keyboard_queue.length > 0) {
+                    const a = +Date.now()
+                    await this.kbd_char.writeValue(this.keyboard_queue.shift());
+                    console.log(Date.now() - a);
+                } else if (this.mouse_dirty) {
                     const val = new Uint8Array([
                         this.mouseX & 0xFF,
                         this.mouseY & 0xFF,
@@ -61,8 +65,6 @@ export class Bluetooth {
                     this.mouseScroll = 0;
 
                     await this.mouse_char.writeValue(val);
-                } else if (this.keyboard_queue.length > 0) {
-                    await this.kbd_char.writeValue(this.keyboard_queue.shift());
                 } else {
                     // Escape
                     this.gatt_busy = false;
@@ -72,7 +74,7 @@ export class Bluetooth {
                 console.error(e);
                 this.gatt_busy = false;
                 return ;
-        }
+            }
         }
     }
 
