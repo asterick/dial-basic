@@ -144,7 +144,7 @@ export default class KVSDisplay extends React.Component {
 
 	/* Update device */
 	updateMouse(mouse) {
-		const {x,y,scroll,buttons} = this.state.mouse;
+		const {x,y,scroll,buttons} = mouse;
 		mouse.x = 0;
 		mouse.y = 0;
 		mouse.scroll = 0;

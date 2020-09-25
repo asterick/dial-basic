@@ -12,10 +12,14 @@ export class Bluetooth {
         this.gatt_busy = false;
     }
 
+    get connected() {
+        return this.gatt && this.gatt.connected;
+    }
+
     async connect() {
         this.device = await navigator.bluetooth.requestDevice(options);
-        const gatt = await this.device.gatt.connect();
-        const service = await gatt.getPrimaryService(DIAL_BASIC_SERVICE);
+        this.gatt = await this.device.gatt.connect();
+        const service = await this.gatt.getPrimaryService(DIAL_BASIC_SERVICE);
         const characteristics = await service.getCharacteristics();
 
         this.led_char = characteristics[2];
@@ -48,10 +52,14 @@ export class Bluetooth {
 
         while (true) {
             try {
-                if (this.keyboard_queue.length > 0) {
-                    const a = +Date.now()
-                    await this.kbd_char.writeValue(this.keyboard_queue.shift());
-                    console.log(Date.now() - a);
+                if (!this.connected) {
+                    this.keyboard_queue = [];
+                    this.mouseX = 0;
+                    this.mouseY = 0;
+                    this.mouseScroll = 0;
+                    break ;
+                } else if (this.keyboard_queue.length > 0) {
+                    await this.kbd_char.writeValueWithoutResponse(this.keyboard_queue.shift());
                 } else if (this.mouse_dirty) {
                     const val = new Uint8Array([
                         this.mouseX & 0xFF,
@@ -63,19 +71,19 @@ export class Bluetooth {
                     this.mouseX = 0;
                     this.mouseY = 0;
                     this.mouseScroll = 0;
+                    this.mouse_dirty = false;
 
-                    await this.mouse_char.writeValue(val);
+                    await this.mouse_char.writeValueWithoutResponse(val);
                 } else {
-                    // Escape
-                    this.gatt_busy = false;
-                    return ;
+                    break ;
                 }
             } catch (e) {
                 console.error(e);
-                this.gatt_busy = false;
-                return ;
+                break ;
             }
         }
+
+        this.gatt_busy = false;
     }
 
     led_update(e) {
