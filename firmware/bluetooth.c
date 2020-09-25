@@ -17,6 +17,9 @@
 #include "nrf_ble_gatt.h"
 #include "app_timer.h"
 
+#include "keyboard.h"
+#include "mouse.h"
+
 #define DEVICE_NAME                     "DialBasic"                             /**< Name of device. Will be included in the advertising data. */
 
 #define APP_BLE_OBSERVER_PRIO           3                                       /**< Application's BLE observer priority. You shouldn't need to modify this value. */
@@ -68,6 +71,8 @@ static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        
 static uint8_t m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;                   /**< Advertising handle used to identify an advertising set. */
 static uint8_t m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];                    /**< Buffer for storing an encoded advertising set. */
 static uint8_t m_enc_scan_response_data[BLE_GAP_ADV_SET_DATA_SIZE_MAX];         /**< Buffer for storing an encoded scan data. */
+
+static uint8_t m_led_status;
 
 /**@brief Struct that contains pointers to the encoded advertising data. */
 static ble_gap_adv_data_t m_adv_data =
@@ -154,10 +159,11 @@ static void ble_serial_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
                 // TODO: HANDLE WRITE HERE
             }
             else if (p_evt_write->handle == m_serial.kbd_write_char_handles.value_handle) {
-                // TODO: HANDLE WRITE HERE
+                keyboard_set_scanids(p_evt_write->data, p_evt_write->len);
             }
-            else if (p_evt_write->handle == m_serial.mouse_write_char_handles.value_handle) {
-                // TODO: HANDLE WRITE HERE
+            else if (p_evt_write->handle == m_serial.mouse_write_char_handles.value_handle &&
+                    p_evt_write->len == 4) {
+                mouse_adjust_movement(p_evt_write->data[0], p_evt_write->data[1], p_evt_write->data[2], p_evt_write->data[3]);
             }
             break;
 
@@ -167,7 +173,7 @@ static void ble_serial_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
     }
 }
 
-uint32_t ble_serial_write(uint16_t conn_handle, uint8_t *data, uint16_t len)
+uint32_t ble_serial_write(uint8_t *data, uint16_t len)
 {
     ble_gatts_hvx_params_t params;
 
@@ -177,7 +183,24 @@ uint32_t ble_serial_write(uint16_t conn_handle, uint8_t *data, uint16_t len)
     params.p_data = data;
     params.p_len  = &len;
 
-    return sd_ble_gatts_hvx(conn_handle, &params);
+    return sd_ble_gatts_hvx(m_conn_handle, &params);
+}
+
+uint32_t ble_kbd_status_write(uint8_t data)
+{
+    if (data == m_led_status) return NRF_SUCCESS;
+    m_led_status = data;
+
+    ble_gatts_hvx_params_t params;
+    uint16_t len = sizeof(m_led_status);
+
+    memset(&params, 0, sizeof(params));
+    params.type   = BLE_GATT_HVX_NOTIFICATION;
+    params.handle = m_serial.kbd_status_char_handles.value_handle;
+    params.p_data = &m_led_status;
+    params.p_len  = &len;
+
+    return sd_ble_gatts_hvx(m_conn_handle, &params);
 }
 
 /**@brief Function for handling BLE events.
@@ -192,6 +215,9 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
     switch (p_ble_evt->header.evt_id)
     {
         case BLE_GAP_EVT_CONNECTED:
+            m_led_status = ~0;
+            ble_kbd_status_write(0);
+
             m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
             break;
 

@@ -127,6 +127,46 @@ static void repeated_timer_handler(void * p_context)
     */
 }
 
+void keyboard_set_scanids(const uint8_t* keys, uint16_t len) {
+    app_usbd_hid_kbd_ctx_t * p_kbd_ctx;
+
+    // Prevent the high-throughput thread from running
+    app_timer_stop(m_repeated_timer_id);
+
+    for (int i = 0; i < 6; i++) {
+        app_usbd_hid_access_lock(&keyboards[i]->specific.p_data->ctx.hid_ctx);
+    }
+
+    // Zero out our other keyboards
+    for (int i = 1; i < 6; i++) {
+        p_kbd_ctx = &keyboards[i]->specific.p_data->ctx;
+        
+        p_kbd_ctx->rep.modifier = 0;
+        memset(p_kbd_ctx->rep.key_table, 0, sizeof(p_kbd_ctx->rep.key_table));
+    }
+
+    // Set keyboard0 to the proper state
+    memcpy(p_kbd_ctx->rep.key_table, keys, len < 6 ? len : 6);
+    p_kbd_ctx = &keyboards[0]->specific.p_data->ctx;
+    for (int i = 0; i < len; i++) {
+        if (keys[i] >= 0xE0 && keys[i] <= 0xE7) {
+            p_kbd_ctx->rep.modifier = 1 << (keys[i] & 7);
+        }
+    }
+
+    // Unlock and transmit
+    for (int i = 0; i < 6; i++) {
+        app_usbd_hid_access_unlock(&keyboards[i]->specific.p_data->ctx.hid_ctx);
+    }
+   
+    for (int i = 0; i < 6; i++) {
+        if (app_usbd_hid_trans_required(&keyboards[i]->specific.p_data->ctx.hid_ctx))
+        {
+            hid_kbd_transfer_set(keyboards[i]);
+        }
+    }
+}
+
 static void hid_kbd_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                     app_usbd_hid_user_event_t event)
 {
@@ -159,5 +199,5 @@ void app_usbd_keyboard_init() {
                                 APP_TIMER_MODE_REPEATED,
                                 repeated_timer_handler);
 
-    app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(17), NULL);
+    //app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(17), NULL);
 }

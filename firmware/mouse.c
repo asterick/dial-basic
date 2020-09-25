@@ -44,6 +44,15 @@ static void hid_mouse_user_ev_handler(app_usbd_class_inst_t const * p_inst,
     }
 }
 
+void mouse_adjust_movement(int8_t x, int8_t y, int8_t scroll, uint8_t buttons) {
+    if (x) app_usbd_hid_mouse_x_move(&m_app_hid_mouse, x);
+    if (y) app_usbd_hid_mouse_y_move(&m_app_hid_mouse, y);
+    if (scroll) app_usbd_hid_mouse_scroll_move(&m_app_hid_mouse, scroll);
+    for (int i = 0; i < 8; i++) {
+        app_usbd_hid_mouse_button_state(&m_app_hid_mouse, i, i & (1 << i));
+    }
+}
+
 void app_usbd_mouse_init() {
     ret_code_t err_code;
     app_usbd_class_inst_t const * class_inst;

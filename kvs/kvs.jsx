@@ -149,19 +149,9 @@ export default class KVSDisplay extends React.Component {
 
 	updateKeyboard() {
 		let keys = Object.keys(this.state.keys).map((k) => k|0);
-		let modifier = 0;
-
-		for (let i = 0; i < 8; i++) {
-			const idx = keys.indexOf(i+224);
-			if (idx < 0) continue ;
-
-			keys.splice(idx, 1);
-			modifier |= 1 << i;
-		}
-
 		keys.sort();
 
-		console.log(modifier.toString(2), keys)
+		console.log(keys)
 	}
 
 	/* Mouse handlers */
